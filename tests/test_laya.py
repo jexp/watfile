@@ -22,24 +22,29 @@ def _mock_agent(choice: str, probs: dict[str, float]) -> MagicMock:
 def test_laya_maps_choice_answer_to_verdict() -> None:
     cats = ["invoice", "donation", "apartment"]
     probs = {"invoice": 0.7, "donation": 0.2, "apartment": 0.1}
-    with patch("watfile.classifier.laya.laya") as laya_mod:
-        laya_mod.load.return_value = _mock_agent("invoice", probs)
+    with patch("laya_mlx.load", return_value=_mock_agent("invoice", probs), create=True):
         verdict = LayaClassifier(model="test-checkpoint").classify("Invoice #42", cats)
 
     assert verdict.category == "invoice"
     assert verdict.confidence == 0.7
     assert verdict.probabilities == probs
-    # question shape matches the upstream typed-decision schema
-    _, questions = laya_mod.load.return_value.predict.call_args.args
+
+
+def test_laya_question_shape_matches_upstream_schema() -> None:
+    cats = ["invoice", "donation", "apartment"]
+    agent = _mock_agent("invoice", {"invoice": 0.7, "donation": 0.2, "apartment": 0.1})
+    with patch("laya_mlx.load", return_value=agent, create=True):
+        LayaClassifier(model="test-checkpoint").classify("Invoice #42", cats)
+    _, questions = agent.predict.call_args.args
     assert questions[_QUESTION_KEY]["type"] == "choice"
     assert questions[_QUESTION_KEY]["criteria"] == cats
 
 
 def test_laya_truncates_state_to_context_limit() -> None:
-    with patch("watfile.classifier.laya.laya") as laya_mod:
-        laya_mod.load.return_value = _mock_agent("a", {"a": 1.0})
+    agent = _mock_agent("a", {"a": 1.0})
+    with patch("laya_mlx.load", return_value=agent, create=True):
         LayaClassifier().classify("x" * 10_000, ["a", "b"])
-    state, _ = laya_mod.load.return_value.predict.call_args.args
+    state, _ = agent.predict.call_args.args
     assert len(state) <= 3_400
 
 

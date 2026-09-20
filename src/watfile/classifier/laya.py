@@ -18,9 +18,10 @@ from __future__ import annotations
 import os
 from typing import Sequence
 
-import laya_mlx as laya
-
 from .base import Classifier, Verdict
+
+# laya_mlx pulls in mlx, which only exists for Apple Silicon. Import lazily so
+# the package stays installable on Linux/CI and only the laya backend needs it.
 
 #: Default checkpoint: typed-decisions has the larger 1024-token context.
 DEFAULT_MODEL = "aac6fef/laya-typed-decisions-mlx"
@@ -41,6 +42,8 @@ class LayaClassifier(Classifier):
 
     def _agent_or_load(self):
         if self._agent is None:
+            import laya_mlx as laya  # deferred: mlx is Apple-Silicon-only
+
             self._agent = laya.load(self._model_name, dtype="float16")
         return self._agent
 

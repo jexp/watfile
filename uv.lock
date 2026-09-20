@@ -936,10 +936,14 @@ name = "watfile"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "laya-mlx" },
     { name = "liteparse" },
     { name = "tiktoken" },
     { name = "typesafe-sdk" },
+]
+
+[package.optional-dependencies]
+laya = [
+    { name = "laya-mlx" },
 ]
 
 [package.dev-dependencies]
@@ -949,11 +953,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "laya-mlx", specifier = ">=0.1.0" },
+    { name = "laya-mlx", marker = "extra == 'laya'", specifier = ">=0.1.0" },
     { name = "liteparse", specifier = ">=2.14.6" },
     { name = "tiktoken", specifier = ">=0.14.0" },
     { name = "typesafe-sdk", specifier = ">=0.7.0" },
 ]
+provides-extras = ["laya"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.1.1" }]

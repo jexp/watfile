@@ -99,6 +99,8 @@ skipped with a warning; name collisions get a `_1`, `_2`… suffix.
   into ~200-token chunks; chunk 1 decides if its probability is decisive
   (≥0.5), otherwise further chunks are classified and probabilities aggregated
   until the decision is decisive (max 10). On the arXiv fixtures: 3/4 (Jev 4/4).
+  Optional dependency — install with `pip install watfile[laya]` (or `uv tool
+  install 'watfile[laya]'`); Apple Silicon only.
 
 ```sh
 watfile ~/Downloads -r -d ~/docs --backend laya
