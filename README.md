@@ -13,7 +13,7 @@ other backends slot in later.
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
-### From PyPI (once published)
+### From PyPI
 
 ```sh
 # one-off run, no install
@@ -22,6 +22,13 @@ uvx watfile --help
 # persistent CLI on your PATH
 uv tool install watfile
 watfile --help
+```
+
+Updates:
+
+```sh
+uv tool upgrade watfile      # or: watfile --self-update
+uvx watfile@latest ...       # one-off runs always fetch the newest version
 ```
 
 ### Configuration
@@ -123,6 +130,7 @@ main options:
   -h, --help            show this help message and exit
   --help-all            show advanced options too
   -r, --recursive       recurse into folder inputs
+  -v, --version         print version and exit
   -c CATEGORIES         comma-separated categories
   -d DIRECTORY          target folder whose existing subfolders are the categories
   -o OUTPUT             output root for sorted files (default: same as -d, or ./sorted with -c)
@@ -131,6 +139,7 @@ main options:
   -m, --move            move files into the category folder (default: symlink)
   --copy                copy files instead of symlinking
   --symlink             create symlinks in category folders (default)
+  --self-update         update watfile in place (uv tool / pipx aware)
 ```
 
 ### Advanced options

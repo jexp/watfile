@@ -128,6 +128,15 @@ def _classify_one(classifier: Classifier, path: Path, categories: Sequence[str])
     return classifier.classify(text, categories)
 
 
+def _version_line() -> str:
+    try:
+        from importlib.metadata import version
+
+        return f"watfile {version('watfile')}"
+    except Exception:  # not installed (running from source without metadata)
+        return "watfile (development)"
+
+
 def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     """Build the argument parser.
 
@@ -143,6 +152,9 @@ def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     parser.add_argument("inputs", nargs="+", help="files and/or folders to process")
     main = parser.add_argument_group("main options")
     main.add_argument("-r", "--recursive", action="store_true", help="recurse into folder inputs")
+    main.add_argument(
+        "-v", "--version", action="version", version=_version_line(), help="print version and exit"
+    )
     target = main.add_mutually_exclusive_group(required=True)
     target.add_argument("-c", "--categories", help="comma-separated categories, e.g. invoice,donation,apartment")
     target.add_argument("-d", "--directory", help="target folder whose existing subfolders are the categories")
@@ -185,7 +197,48 @@ def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     )
     if not show_advanced:
         parser.add_argument("--help-all", action="store_true", help="show advanced options too")
+        parser.add_argument(
+            "--self-update",
+            action="store_true",
+            help="update watfile in place (uv tool / pipx aware)",
+        )
     return parser
+
+
+def _self_update() -> int:
+    """Update watfile in place if installed via a known tool manager."""
+    import shutil
+    import subprocess
+
+    package_dir = Path(__file__).resolve()
+    candidates = {
+        "uv": ["uv", "tool", "upgrade", "watfile"],
+        "pipx": ["pipx", "upgrade", "watfile"],
+    }
+    for manager, cmd in candidates.items():
+        exe = shutil.which(manager)
+        if not exe:
+            continue
+        # does this manager own the install? (uv tool: ~/.local/share/uv/tools/, pipx: ~/.local/pipx/venvs/)
+        markers = {
+            "uv": [Path.home() / ".local" / "share" / "uv" / "tools" / "watfile"],
+            "pipx": [Path.home() / ".local" / "pipx" / "venvs" / "watfile"],
+        }
+        if not any(m.is_dir() for m in markers[manager]):
+            continue
+        print(f"{_version_line()} -> updating via {manager} ...")
+        result = subprocess.run(cmd, capture_output=False)
+        return result.returncode
+    print(
+        f"{_version_line()}\n"
+        "could not detect a supported install method (uv tool / pipx).\n"
+        "Update manually, e.g.:\n"
+        "  uv tool upgrade watfile\n"
+        "  pipx upgrade watfile\n"
+        f"(installed at: {package_dir})",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -194,6 +247,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if "--help-all" in raw:
         _build_parser(show_advanced=True).print_help()
         return 0
+    if "--self-update" in raw:
+        return _self_update()
     parser = _build_parser(show_advanced=False)
     args = parser.parse_args(argv)
 
@@ -278,5 +333,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 1 if failures == len(files) else 0
 
 
+def _entry() -> int:
+    """Console-script entry: prefix unexpected failures with the version line
+    so bug reports carry it."""
+    try:
+        return main()
+    except SystemExit:
+        raise
+    except Exception:
+        print(f"\n[{_version_line()}] unexpected error:", file=sys.stderr)
+        raise
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_entry())
