@@ -119,25 +119,36 @@ watfile ~/Downloads -r -d ~/docs --backend laya
 
 ```
 usage: watfile [-h] [-r] (-c CATEGORIES | -d DIRECTORY) [-o OUTPUT]
-               [--backend {jev,laya}] [-n] [--copy]
+               [--backend {jev,laya}] [--batch N]
+               [--chunk-tokens CHUNK_TOKENS] [--chunks N] [-n]
+               [-m | --copy | --symlink]
                inputs [inputs ...]
-
-positional arguments:
-  inputs                files and/or folders to process
 
 options:
   -h, --help            show this help message and exit
   -r, --recursive       recurse into folder inputs
-  -c CATEGORIES, --categories CATEGORIES
-                        comma-separated categories, e.g. invoice,donation,apartment
-  -d DIRECTORY, --directory
-                        target folder whose existing subfolders are the categories
-  -o OUTPUT, --output   output root for sorted files (default: same as -d, or ./sorted with -c)
+  -c CATEGORIES         comma-separated categories
+  -d DIRECTORY          target folder whose existing subfolders are the categories
+  -o OUTPUT             output root for sorted files (default: same as -d, or ./sorted with -c)
   --backend {jev,laya}  classifier backend (default: jev)
+  --batch N             classify N files per API call (jev: documents
+                        packed into one system_one call, ~256 tokens each,
+                        ~100 docs per 30k-token window)
+  --chunk-tokens N      per-document token budget (default: backend-specific)
+  --chunks N            split each document into N chunks, aggregate
+                        probabilities; 0 = adaptive. Default: 0 for laya,
+                        1 for jev
   -n, --dry-run         print decisions without placing files
   -m, --move            move files into the category folder (default: symlink)
   --copy                copy files instead of symlinking
   --symlink             create symlinks in category folders (default)
+```
+
+Batching example:
+
+```sh
+# classify 100 files at ~4 API calls instead of 100
+uv run watfile ~/Downloads -r -d ~/docs --batch 100
 ```
 
 ## Development

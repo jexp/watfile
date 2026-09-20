@@ -10,10 +10,21 @@ from typing import Sequence
 from .classifier.base import Classifier, Verdict
 from .classifier.jev import JevClassifier
 from .classifier.laya import LayaClassifier
-from .classifier.multi import MultiChunkClassifier
+from .classifier.multi import MultiChunkClassifier, chunk_text_tokens, count_tokens
 from .config import apply_config, load_config
 from .extract import UnsupportedFileTypeError, extract_text
 from .sorter import PLACEMENT_COPY, PLACEMENT_MOVE, PLACEMENT_SYMLINK, place_file
+
+#: Jev context window (tokens) with headroom for state wrapper + questions.
+JEV_WINDOW_TOKENS = 32_000 - 2_000
+
+#: Per-document token budget for Jev batching. Measured: 64 tokens (title +
+#: first sentence) already give 4/4 correct with conf 1.00 on the arXiv
+#: fixtures AND on same-genre German documents (invoice/donation/contract);
+#: larger budgets don't improve accuracy. 256 tokens is a safe margin that
+#: covers title + abstract/letterhead + first table, and still packs ~100
+#: documents into the 30k-token batch window. Override with --chunk-tokens.
+JEV_DOC_TOKENS = 256
 
 
 def _collect_files(inputs: Sequence[str], recursive: bool) -> list[Path]:
@@ -55,6 +66,36 @@ def _parse_categories_arg(raw: str) -> list[str]:
     if len(cats) < 2:
         raise SystemExit("need at least 2 categories for -c")
     return cats
+
+
+def _trim_to_tokens(text: str, max_tokens: int) -> str:
+    """First *max_tokens* tokens of *text* (whitespace-clean cut)."""
+    parts = chunk_text_tokens(text, max_tokens)
+    return parts[0] if parts else ""
+
+
+def _pack_batches(
+    texts: dict[int, str], doc_tokens: int, window_tokens: int, max_files: int
+) -> list[list[int]]:
+    """Greedily pack file indices into batches that fit *window_tokens* in total.
+
+    texts maps file-index -> trimmed text. Returns lists of file indices.
+    A single oversized document still gets its own batch (system_one will
+    decide what to do with it).
+    """
+    batches: list[list[int]] = []
+    current: list[int] = []
+    used = 0
+    for idx, text in texts.items():
+        cost = count_tokens(text) + 20  # id wrapper overhead
+        if current and (used + cost > window_tokens or len(current) >= max_files):
+            batches.append(current)
+            current, used = [], 0
+        current.append(idx)
+        used += cost
+    if current:
+        batches.append(current)
+    return batches
 
 
 def _build_classifier(name: str, config) -> Classifier:
@@ -100,6 +141,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
     parser.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
     parser.add_argument(
+        "--batch",
+        type=int,
+        default=1,
+        metavar="N",
+        help="classify N files per API call (jev: packs documents into one "
+        "system_one call using the model's context window; capped by tokens)",
+    )
+    parser.add_argument(
+        "--chunk-tokens",
+        type=int,
+        default=None,
+        help="per-document token budget when batching or chunking (default: auto)",
+    )
+    parser.add_argument(
         "--chunks",
         type=int,
         default=-1,  # backend-specific default
@@ -136,23 +191,51 @@ def main(argv: Sequence[str] | None = None) -> int:
     if chunks != 1:
         classifier = MultiChunkClassifier(classifier, chunks=chunks)
 
-    failures = 0
-    for path in files:
-        print(f"{path.name}: ", end="", flush=True)
-        verdict = _classify_one(classifier, path, categories)
-        if verdict is None:
-            failures += 1
-            continue
-        placement = (
-            PLACEMENT_MOVE if args.move else PLACEMENT_COPY if args.copy else PLACEMENT_SYMLINK
-        )
+    placement = (
+        PLACEMENT_MOVE if args.move else PLACEMENT_COPY if args.copy else PLACEMENT_SYMLINK
+    )
+    actions = {
+        PLACEMENT_MOVE: "move",
+        PLACEMENT_COPY: "copy",
+        PLACEMENT_SYMLINK: "symlink",
+    }[placement]
+
+    def _place(path: Path, verdict) -> None:
         result = place_file(path, verdict.category, target_root, dry_run=args.dry_run, placement=placement)
-        action = ("would " if args.dry_run else "") + {
-            PLACEMENT_MOVE: "move",
-            PLACEMENT_COPY: "copy",
-            PLACEMENT_SYMLINK: "symlink",
-        }[placement]
-        print(f"{verdict.category} (conf {verdict.confidence:.2f}) -> {action} to {result.destination}")
+        prefix = "would " if args.dry_run else ""
+        print(f"{verdict.category} (conf {verdict.confidence:.2f}) -> {prefix}{actions} to {result.destination}")
+
+    failures = 0
+    if args.batch > 1 and not isinstance(classifier, MultiChunkClassifier):
+        # extract all texts first, then classify in token-packed batches
+        doc_tokens = args.chunk_tokens or JEV_DOC_TOKENS
+        texts: dict[int, str] = {}
+        for i, path in enumerate(files):
+            try:
+                text = extract_text(path)
+            except UnsupportedFileTypeError as exc:
+                print(f"{path.name}: skipped ({exc})", file=sys.stderr)
+                failures += 1
+                continue
+            if not text.strip():
+                print(f"{path.name}: skipped (no extractable text)", file=sys.stderr)
+                failures += 1
+                continue
+            texts[i] = _trim_to_tokens(text, doc_tokens)
+        for batch in _pack_batches(texts, doc_tokens, JEV_WINDOW_TOKENS, args.batch):
+            print(f"batch of {len(batch)} file(s)...", flush=True)
+            verdicts = classifier.classify_batch([texts[i] for i in batch], categories)
+            for i, verdict in zip(batch, verdicts):
+                print(f"{files[i].name}: ", end="")
+                _place(files[i], verdict)
+    else:
+        for path in files:
+            print(f"{path.name}: ", end="", flush=True)
+            verdict = _classify_one(classifier, path, categories)
+            if verdict is None:
+                failures += 1
+                continue
+            _place(path, verdict)
 
     return 1 if failures == len(files) else 0
 

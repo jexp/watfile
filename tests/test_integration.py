@@ -60,3 +60,19 @@ def test_cli_move_mode(tmp_path: Path) -> None:
     dest = out / "invoice" / "bill.txt"
     assert dest.exists() and not dest.is_symlink()
     assert not (incoming / "bill.txt").exists()
+
+
+def test_cli_batch_mode(tmp_path: Path) -> None:
+    """--batch N classifies N files per API call."""
+    _ensure_key_in_env()
+    incoming = tmp_path / "in"
+    incoming.mkdir()
+    (incoming / "bill.txt").write_text("Invoice #7, amount EUR 99, due next week, pay to IBAN DE12...")
+    (incoming / "charity.txt").write_text("Donation receipt: thank you for donating EUR 25 to charity Y.")
+    (incoming / "lease.txt").write_text("Mietvertrag: 3-Zimmer-Wohnung, Grundmiete 1.180 EUR, Kaution 2.800 EUR.")
+    out = tmp_path / "sorted"
+    rc = main([str(incoming), "-c", "invoice,donation,apartment", "-o", str(out), "--batch", "3"])
+    assert rc == 0
+    assert (out / "invoice" / "bill.txt").is_symlink()
+    assert (out / "donation" / "charity.txt").is_symlink()
+    assert (out / "apartment" / "lease.txt").is_symlink()
