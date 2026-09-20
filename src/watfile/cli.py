@@ -11,7 +11,7 @@ from .classifier.base import Classifier, Verdict
 from .classifier.jev import JevClassifier
 from .config import apply_config, load_config
 from .extract import UnsupportedFileTypeError, extract_text
-from .sorter import place_file
+from .sorter import PLACEMENT_COPY, PLACEMENT_MOVE, PLACEMENT_SYMLINK, place_file
 
 
 def _collect_files(inputs: Sequence[str], recursive: bool) -> list[Path]:
@@ -97,8 +97,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     target.add_argument("-d", "--directory", help="target folder whose existing subfolders are the categories")
     parser.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
     parser.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
-    parser.add_argument("-n", "--dry-run", action="store_true", help="print decisions without moving files")
-    parser.add_argument("--copy", action="store_true", help="copy instead of move")
+    parser.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
+    placement = parser.add_mutually_exclusive_group()
+    placement.add_argument("-m", "--move", action="store_true", help="move files into the category folder (default: symlink)")
+    placement.add_argument("--copy", action="store_true", help="copy files instead of symlinking")
+    placement.add_argument("--symlink", action="store_true", help="create symlinks in category folders (default)")
     args = parser.parse_args(argv)
 
     if args.categories:
@@ -128,8 +131,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         if verdict is None:
             failures += 1
             continue
-        result = place_file(path, verdict.category, target_root, dry_run=args.dry_run, copy=args.copy)
-        action = "would move" if args.dry_run else ("copied" if args.copy else "moved")
+        placement = (
+            PLACEMENT_MOVE if args.move else PLACEMENT_COPY if args.copy else PLACEMENT_SYMLINK
+        )
+        result = place_file(path, verdict.category, target_root, dry_run=args.dry_run, placement=placement)
+        action = ("would " if args.dry_run else "") + {
+            PLACEMENT_MOVE: "move",
+            PLACEMENT_COPY: "copy",
+            PLACEMENT_SYMLINK: "symlink",
+        }[placement]
         print(f"{verdict.category} (conf {verdict.confidence:.2f}) -> {action} to {result.destination}")
 
     return 1 if failures == len(files) else 0

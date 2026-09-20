@@ -69,7 +69,10 @@ uv run watfile ~/Downloads -r -d ~/docs
 # preview without touching anything
 uv run watfile ~/Downloads -r -d ~/docs -n
 
-# copy instead of move
+# actually move the files (default is symlinking into the category folders)
+uv run watfile ~/Downloads -r -d ~/docs -m
+
+# copy instead
 uv run watfile ~/Downloads -r -d ~/docs --copy
 
 # custom output root with -c
@@ -79,7 +82,7 @@ uv run watfile *.pdf -c computerscience,biology -o ~/sorted
 Output per file:
 
 ```
-bill.pdf: invoice (conf 0.94) -> moved to ~/docs/invoice/bill.pdf
+bill.pdf: invoice (conf 0.94) -> symlink to ~/docs/invoice/bill.pdf
 ```
 
 Files that can't be classified (unsupported extension, no extractable text) are
@@ -111,8 +114,10 @@ options:
                         target folder whose existing subfolders are the categories
   -o OUTPUT, --output   output root for sorted files (default: same as -d, or ./sorted with -c)
   --backend {jev,laya}  classifier backend (default: jev)
-  -n, --dry-run         print decisions without moving files
-  --copy                copy instead of move
+  -n, --dry-run         print decisions without placing files
+  -m, --move            move files into the category folder (default: symlink)
+  --copy                copy files instead of symlinking
+  --symlink             create symlinks in category folders (default)
 ```
 
 ## Development

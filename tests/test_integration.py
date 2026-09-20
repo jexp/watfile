@@ -42,5 +42,21 @@ def test_cli_end_to_end(tmp_path: Path) -> None:
     out = tmp_path / "sorted"
     rc = main([str(incoming), "-c", "invoice,donation,apartment", "-o", str(out)])
     assert rc == 0
-    assert (out / "invoice" / "bill.txt").exists()
-    assert (out / "donation" / "charity.txt").exists()
+    # default placement is symlink: link exists in category folder, original stays
+    assert (out / "invoice" / "bill.txt").is_symlink()
+    assert (out / "donation" / "charity.txt").is_symlink()
+    assert (incoming / "bill.txt").exists()
+    assert (incoming / "charity.txt").exists()
+
+
+def test_cli_move_mode(tmp_path: Path) -> None:
+    _ensure_key_in_env()
+    incoming = tmp_path / "in"
+    incoming.mkdir()
+    (incoming / "bill.txt").write_text("Invoice #7, amount EUR 99, due next week, pay to IBAN DE12...")
+    out = tmp_path / "sorted"
+    rc = main([str(incoming), "-c", "invoice,donation,apartment", "-o", str(out), "-m"])
+    assert rc == 0
+    dest = out / "invoice" / "bill.txt"
+    assert dest.exists() and not dest.is_symlink()
+    assert not (incoming / "bill.txt").exists()
