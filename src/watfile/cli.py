@@ -143,10 +143,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--batch",
         type=int,
-        default=1,
+        default=None,  # None = auto (on for jev, off for laya)
         metavar="N",
-        help="classify N files per API call (jev: packs documents into one "
-        "system_one call using the model's context window; capped by tokens)",
+        help="cap files per API call (default: automatic — batches everything that "
+        "fits the context window for jev; no batching for laya)",
+    )
+    parser.add_argument(
+        "--no-batch",
+        action="store_true",
+        help="disable batching (one API call per file; useful for debugging)",
     )
     parser.add_argument(
         "--chunk-tokens",
@@ -206,8 +211,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{verdict.category} (conf {verdict.confidence:.2f}) -> {prefix}{actions} to {result.destination}")
 
     failures = 0
-    if args.batch > 1 and not isinstance(classifier, MultiChunkClassifier):
-        # extract all texts first, then classify in token-packed batches
+    # batching is automatic for jev (strictly better: fewer calls, same or
+    # better accuracy per measurement), off for laya (local inference is
+    # already fast), disabled by --no-batch or when multi-chunking is active
+    # (batching × chunking would multiply calls — composition needs design).
+    batch_on = (
+        not args.no_batch
+        and args.backend == "jev"
+        and not isinstance(classifier, MultiChunkClassifier)
+    )
+    if batch_on:
+        batch_cap = args.batch if args.batch is not None else 10_000  # effectively "window only"
         doc_tokens = args.chunk_tokens or JEV_DOC_TOKENS
         texts: dict[int, str] = {}
         for i, path in enumerate(files):
@@ -222,7 +236,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 failures += 1
                 continue
             texts[i] = _trim_to_tokens(text, doc_tokens)
-        for batch in _pack_batches(texts, doc_tokens, JEV_WINDOW_TOKENS, args.batch):
+        for batch in _pack_batches(texts, doc_tokens, JEV_WINDOW_TOKENS, batch_cap):
             print(f"batch of {len(batch)} file(s)...", flush=True)
             verdicts = classifier.classify_batch([texts[i] for i in batch], categories)
             for i, verdict in zip(batch, verdicts):

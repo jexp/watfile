@@ -99,6 +99,9 @@ skipped with a warning; name collisions get a `_1`, `_2`… suffix.
 
 - **`jev` (default)** — [TypeSafe AI](https://docs.typesafe.ai) Jev, cloud API.
   Needs `TYPESAFE_API_KEY`. Highest accuracy (4/4 on the arXiv fixtures).
+  **Batches automatically**: documents are packed into one `system_one` call
+  (~256 tokens each, up to ~100 files per call in the 30k-token window), so
+  classifying a folder costs one API call, not one per file.
 - **`laya`** — local [laya-mlx](https://github.com/mizorewww/laya-mlx) typed
   decision model on Apple Silicon (MLX, ~13ms/decision, fully offline after a
   one-time ~1GB checkpoint download). No API key needed. Same question shape
@@ -131,9 +134,10 @@ options:
   -d DIRECTORY          target folder whose existing subfolders are the categories
   -o OUTPUT             output root for sorted files (default: same as -d, or ./sorted with -c)
   --backend {jev,laya}  classifier backend (default: jev)
-  --batch N             classify N files per API call (jev: documents
-                        packed into one system_one call, ~256 tokens each,
-                        ~100 docs per 30k-token window)
+  --batch N             cap files per API call (default: automatic — jev packs
+                        everything that fits the 30k-token window, ~100 docs;
+                        laya doesn't batch)
+  --no-batch            disable batching, one API call per file (debugging)
   --chunk-tokens N      per-document token budget (default: backend-specific)
   --chunks N            split each document into N chunks, aggregate
                         probabilities; 0 = adaptive. Default: 0 for laya,
@@ -144,11 +148,14 @@ options:
   --symlink             create symlinks in category folders (default)
 ```
 
-Batching example:
+Batching example (jev batches by default; the flag just caps batch size):
 
 ```sh
-# classify 100 files at ~4 API calls instead of 100
-uv run watfile ~/Downloads -r -d ~/docs --batch 100
+# 100 files: ~2 API calls instead of 100 (256 tokens/doc, 30k window)
+uv run watfile ~/Downloads -r -d ~/docs
+
+# cap batch size, e.g. to keep batches small for debugging
+uv run watfile ~/Downloads -r -d ~/docs --batch 25
 ```
 
 ## Development
@@ -163,5 +170,6 @@ uv run pytest              # unit tests; live API tests skip without TYPESAFE_AP
 
 ## Roadmap
 
-- `laya` local backend (MLX via OpenAI-compatible HTTP)
-- batching: classify 25/50/100 files in a single API call
+- ~~`laya` local backend (MLX via OpenAI-compatible HTTP)~~ done — native laya-mlx
+- ~~batching: classify 25/50/100 files in a single API call~~ done — jev batches
+  automatically into the 30k-token window (default on, `--no-batch` to disable)
