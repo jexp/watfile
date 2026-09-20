@@ -9,6 +9,7 @@ from typing import Sequence
 
 from .classifier.base import Classifier, Verdict
 from .classifier.jev import JevClassifier
+from .classifier.laya import LayaClassifier
 from .config import apply_config, load_config
 from .extract import UnsupportedFileTypeError, extract_text
 from .sorter import PLACEMENT_COPY, PLACEMENT_MOVE, PLACEMENT_SYMLINK, place_file
@@ -69,7 +70,7 @@ def _build_classifier(name: str, config) -> Classifier:
         model = config.model or "jev-latest"
         return JevClassifier(model=model)
     if name == "laya":
-        raise SystemExit("laya backend not yet implemented (step 80 in PLAN.md)")
+        return LayaClassifier(model=config.laya_model)
     raise SystemExit(f"unknown backend: {name}")
 
 

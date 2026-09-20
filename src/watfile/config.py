@@ -50,6 +50,7 @@ class Config:
     api_key: str | None = None
     base_url: str | None = None
     model: str | None = None
+    laya_model: str | None = None
 
 
 #: TOML config uses friendly field names (api_key/base_url/model);
@@ -58,6 +59,7 @@ _TOML_TO_ENV = {
     "api_key": API_KEY_ENV,
     "base_url": "TYPESAFE_BASE_URL",
     "model": "TYPESAFE_DEFAULT_MODEL",
+    "laya_model": "LAYA_MODEL",
 }
 
 
@@ -82,7 +84,7 @@ def load_config() -> Config:
                 values[key.strip()] = value.strip().strip("'\"")
 
     # real environment always wins
-    for key in (API_KEY_ENV, "TYPESAFE_BASE_URL", "TYPESAFE_DEFAULT_MODEL"):
+    for key in (API_KEY_ENV, "TYPESAFE_BASE_URL", "TYPESAFE_DEFAULT_MODEL", "LAYA_MODEL"):
         if os.environ.get(key):
             values[key] = os.environ[key]
 
@@ -90,6 +92,7 @@ def load_config() -> Config:
         api_key=values.get(API_KEY_ENV),
         base_url=values.get("TYPESAFE_BASE_URL"),
         model=values.get("TYPESAFE_DEFAULT_MODEL"),
+        laya_model=values.get("LAYA_MODEL"),
     )
 
 

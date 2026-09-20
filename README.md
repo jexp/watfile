@@ -95,6 +95,23 @@ skipped with a warning; name collisions get a `_1`, `_2`… suffix.
   first 2 pages are parsed, OCR disabled — enough for classification, ~1000x
   faster than a full parse. Scanned/image-only PDFs are skipped.
 
+### Backends
+
+- **`jev` (default)** — [TypeSafe AI](https://docs.typesafe.ai) Jev, cloud API.
+  Needs `TYPESAFE_API_KEY`. Highest accuracy (4/4 on the arXiv fixtures).
+- **`laya`** — local [laya-mlx](https://github.com/mizorewww/laya-mlx) typed
+  decision model on Apple Silicon (MLX, ~13ms/decision, fully offline after a
+  one-time ~1GB checkpoint download). No API key needed. Same question shape
+  as Jev; on the arXiv fixtures it gets 2/4 — good when you need local/private
+  classification, weaker on subtle domain boundaries.
+
+```sh
+watfile ~/Downloads -r -d ~/docs --backend laya
+# pick a checkpoint via config or env:
+#   ~/.config/watfile/config.toml -> laya_model = "aac6fef/laya-multilingual-mlx"
+#   or LAYA_MODEL=aac6fef/laya-mlx
+```
+
 ### Options
 
 ```
