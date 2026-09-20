@@ -137,6 +137,14 @@ def _version_line() -> str:
         return "watfile (development)"
 
 
+class _VersionedParser(argparse.ArgumentParser):
+    """ArgumentParser whose usage errors carry the version line (bug reports)."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(2, f"{self.prog}: error: {message}\n[{_version_line()}]\n")
+
+
 def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     """Build the argument parser.
 
@@ -144,7 +152,7 @@ def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     work); show_advanced=True lists them. This keeps `watfile --help` short.
     """
     epilog = None if show_advanced else "Run 'watfile --help-all' for advanced options (batching, chunking, token budgets)."
-    parser = argparse.ArgumentParser(
+    parser = _VersionedParser(
         prog="watfile",
         description="Classify files with a decision model and sort them into category folders.",
         epilog=epilog,
