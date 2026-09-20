@@ -25,9 +25,11 @@ from .base import Classifier, Verdict
 #: Default checkpoint: typed-decisions has the larger 1024-token context.
 DEFAULT_MODEL = "aac6fef/laya-typed-decisions-mlx"
 
-#: laya's encoder context is 512-1024 tokens (~3.5 chars/token). Leave room for
-#: question + state wrapper; Jev gets the full extract, laya gets the head.
-_MAX_STATE_CHARS = 2_500
+#: laya's encoder context is 512-1024 tokens. When used bare (no MultiChunk
+#: wrapper), clamp the state by estimated tokens so the encoder isn't overflowed.
+#: Chars are a rough proxy (~4 chars/token); MultiChunkClassifier sizes by
+#: real tiktoken counts instead.
+_MAX_STATE_CHARS = 3_400
 
 _QUESTION_KEY = "category"
 

@@ -40,7 +40,7 @@ def test_laya_truncates_state_to_context_limit() -> None:
         laya_mod.load.return_value = _mock_agent("a", {"a": 1.0})
         LayaClassifier().classify("x" * 10_000, ["a", "b"])
     state, _ = laya_mod.load.return_value.predict.call_args.args
-    assert len(state) <= 2_500
+    assert len(state) <= 3_400
 
 
 @pytest.mark.skipif(

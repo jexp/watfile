@@ -102,8 +102,11 @@ skipped with a warning; name collisions get a `_1`, `_2`… suffix.
 - **`laya`** — local [laya-mlx](https://github.com/mizorewww/laya-mlx) typed
   decision model on Apple Silicon (MLX, ~13ms/decision, fully offline after a
   one-time ~1GB checkpoint download). No API key needed. Same question shape
-  as Jev; on the arXiv fixtures it gets 2/4 — good when you need local/private
-  classification, weaker on subtle domain boundaries.
+  as Jev. Because laya's context window is small (512–1024 tokens), the backend
+  defaults to **adaptive multi-chunk classification**: the extract is split
+  into ~200-token chunks; chunk 1 decides if its probability is decisive
+  (≥0.5), otherwise further chunks are classified and probabilities aggregated
+  until the decision is decisive (max 10). On the arXiv fixtures: 3/4 (Jev 4/4).
 
 ```sh
 watfile ~/Downloads -r -d ~/docs --backend laya

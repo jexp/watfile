@@ -10,6 +10,7 @@ from typing import Sequence
 from .classifier.base import Classifier, Verdict
 from .classifier.jev import JevClassifier
 from .classifier.laya import LayaClassifier
+from .classifier.multi import MultiChunkClassifier
 from .config import apply_config, load_config
 from .extract import UnsupportedFileTypeError, extract_text
 from .sorter import PLACEMENT_COPY, PLACEMENT_MOVE, PLACEMENT_SYMLINK, place_file
@@ -98,6 +99,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     target.add_argument("-d", "--directory", help="target folder whose existing subfolders are the categories")
     parser.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
     parser.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
+    parser.add_argument(
+        "--chunks",
+        type=int,
+        default=-1,  # backend-specific default
+        metavar="N",
+        help="split each document into N token-sized chunks and aggregate probabilities; 0 = adaptive (extend chunk by chunk until the decision is decisive). Default: 0 for laya, 1 for jev",
+    )
     parser.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
     placement = parser.add_mutually_exclusive_group()
     placement.add_argument("-m", "--move", action="store_true", help="move files into the category folder (default: symlink)")
@@ -124,6 +132,9 @@ def main(argv: Sequence[str] | None = None) -> int:
           + ("  (dry-run)" if args.dry_run else ""))
 
     classifier = _build_classifier(args.backend, load_config())
+    chunks = args.chunks if args.chunks >= 0 else (0 if args.backend == "laya" else 1)
+    if chunks != 1:
+        classifier = MultiChunkClassifier(classifier, chunks=chunks)
 
     failures = 0
     for path in files:
