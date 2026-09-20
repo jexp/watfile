@@ -10,6 +10,20 @@ import pytest
 from watfile.classifier.laya import _QUESTION_KEY, LayaClassifier
 from watfile.extract import extract_text
 
+try:
+    import laya_mlx  # noqa: F401
+
+    HAS_LAYA = True
+except ImportError:
+    HAS_LAYA = False
+
+#: laya-mlx pulls in mlx (Apple Silicon only); mocked tests can't patch the
+#: package where it isn't installed, so they skip on such machines.
+pytestmark = pytest.mark.skipif(
+    not HAS_LAYA,
+    reason="laya-mlx not installed (Apple Silicon only; pip install watfile[laya])",
+)
+
 FIXTURE_DIR = Path(__file__).parent / "fixture"
 
 
