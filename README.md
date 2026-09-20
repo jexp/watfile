@@ -24,17 +24,6 @@ uv tool install watfile
 watfile --help
 ```
 
-### From source
-
-```sh
-git clone <repo> && cd watfile
-uv sync            # create venv + install deps (typesafe-sdk, liteparse)
-uv run watfile --help
-
-# or install the local checkout as a tool
-uv tool install --from . watfile
-```
-
 ### Configuration
 
 watfile resolves its TypeSafe API key (create one at <https://console.typesafe.ai/>)
@@ -118,22 +107,35 @@ watfile ~/Downloads -r -d ~/docs --backend laya
 #   or LAYA_MODEL=aac6fef/laya-mlx
 ```
 
-### Options
+### Options (main)
+
+`watfile --help` shows only these:
 
 ```
 usage: watfile [-h] [-r] (-c CATEGORIES | -d DIRECTORY) [-o OUTPUT]
-               [--backend {jev,laya}] [--batch N]
-               [--chunk-tokens CHUNK_TOKENS] [--chunks N] [-n]
-               [-m | --copy | --symlink]
+               [--backend {jev,laya}] [-n] [-m | --copy | --symlink]
+               [--help-all]
                inputs [inputs ...]
 
-options:
+main options:
   -h, --help            show this help message and exit
+  --help-all            show advanced options too
   -r, --recursive       recurse into folder inputs
   -c CATEGORIES         comma-separated categories
   -d DIRECTORY          target folder whose existing subfolders are the categories
   -o OUTPUT             output root for sorted files (default: same as -d, or ./sorted with -c)
   --backend {jev,laya}  classifier backend (default: jev)
+  -n, --dry-run         print decisions without placing files
+  -m, --move            move files into the category folder (default: symlink)
+  --copy                copy files instead of symlinking
+  --symlink             create symlinks in category folders (default)
+```
+
+### Advanced options
+
+Shown by `watfile --help-all`:
+
+```
   --batch N             cap files per API call (default: automatic — jev packs
                         everything that fits the 30k-token window, ~100 docs;
                         laya doesn't batch)
@@ -142,10 +144,6 @@ options:
   --chunks N            split each document into N chunks, aggregate
                         probabilities; 0 = adaptive. Default: 0 for laya,
                         1 for jev
-  -n, --dry-run         print decisions without placing files
-  -m, --move            move files into the category folder (default: symlink)
-  --copy                copy files instead of symlinking
-  --symlink             create symlinks in category folders (default)
 ```
 
 Batching example (jev batches by default; the flag just caps batch size):
@@ -159,6 +157,19 @@ uv run watfile ~/Downloads -r -d ~/docs --batch 25
 ```
 
 ## Development
+
+### From source
+
+```sh
+git clone <repo> && cd watfile
+uv sync            # create venv + install deps (typesafe-sdk, liteparse, laya-mlx)
+uv run watfile --help
+
+# or install the local checkout as a tool
+uv tool install --from . watfile
+```
+
+### Tests
 
 ```sh
 uv sync

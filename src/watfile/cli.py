@@ -128,49 +128,73 @@ def _classify_one(classifier: Classifier, path: Path, categories: Sequence[str])
     return classifier.classify(text, categories)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
+    """Build the argument parser.
+
+    show_advanced=False hides the advanced options from --help (they still
+    work); show_advanced=True lists them. This keeps `watfile --help` short.
+    """
+    epilog = None if show_advanced else "Run 'watfile --help-all' for advanced options (batching, chunking, token budgets)."
     parser = argparse.ArgumentParser(
         prog="watfile",
         description="Classify files with a decision model and sort them into category folders.",
+        epilog=epilog,
     )
     parser.add_argument("inputs", nargs="+", help="files and/or folders to process")
-    parser.add_argument("-r", "--recursive", action="store_true", help="recurse into folder inputs")
-    target = parser.add_mutually_exclusive_group(required=True)
+    main = parser.add_argument_group("main options")
+    main.add_argument("-r", "--recursive", action="store_true", help="recurse into folder inputs")
+    target = main.add_mutually_exclusive_group(required=True)
     target.add_argument("-c", "--categories", help="comma-separated categories, e.g. invoice,donation,apartment")
     target.add_argument("-d", "--directory", help="target folder whose existing subfolders are the categories")
-    parser.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
-    parser.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
-    parser.add_argument(
+    main.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
+    main.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
+    main.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
+    placement = main.add_mutually_exclusive_group()
+    placement.add_argument("-m", "--move", action="store_true", help="move files into the category folder (default: symlink)")
+    placement.add_argument("--copy", action="store_true", help="copy files instead of symlinking")
+    placement.add_argument("--symlink", action="store_true", help="create symlinks in category folders (default)")
+
+    advanced = parser.add_argument_group("advanced options" if show_advanced else None)
+    advanced.add_argument(
         "--batch",
         type=int,
         default=None,  # None = auto (on for jev, off for laya)
         metavar="N",
-        help="cap files per API call (default: automatic — batches everything that "
-        "fits the context window for jev; no batching for laya)",
+        help=("cap files per API call (default: automatic — batches everything that "
+        "fits the context window for jev; no batching for laya)" if show_advanced else argparse.SUPPRESS),
     )
-    parser.add_argument(
+    advanced.add_argument(
         "--no-batch",
         action="store_true",
-        help="disable batching (one API call per file; useful for debugging)",
+        help=("disable batching (one API call per file; useful for debugging)" if show_advanced else argparse.SUPPRESS),
     )
-    parser.add_argument(
+    advanced.add_argument(
         "--chunk-tokens",
         type=int,
         default=None,
-        help="per-document token budget when batching or chunking (default: auto)",
+        help=("per-document token budget when batching or chunking (default: auto)" if show_advanced else argparse.SUPPRESS),
     )
-    parser.add_argument(
+    advanced.add_argument(
         "--chunks",
         type=int,
         default=-1,  # backend-specific default
         metavar="N",
-        help="split each document into N token-sized chunks and aggregate probabilities; 0 = adaptive (extend chunk by chunk until the decision is decisive). Default: 0 for laya, 1 for jev",
+        help=("split each document into N token-sized chunks and aggregate probabilities; "
+        "0 = adaptive (extend chunk by chunk until the decision is decisive). "
+        "Default: 0 for laya, 1 for jev" if show_advanced else argparse.SUPPRESS),
     )
-    parser.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
-    placement = parser.add_mutually_exclusive_group()
-    placement.add_argument("-m", "--move", action="store_true", help="move files into the category folder (default: symlink)")
-    placement.add_argument("--copy", action="store_true", help="copy files instead of symlinking")
-    placement.add_argument("--symlink", action="store_true", help="create symlinks in category folders (default)")
+    if not show_advanced:
+        parser.add_argument("--help-all", action="store_true", help="show advanced options too")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    # pre-scan: --help-all renders the full parser instead
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if "--help-all" in raw:
+        _build_parser(show_advanced=True).print_help()
+        return 0
+    parser = _build_parser(show_advanced=False)
     args = parser.parse_args(argv)
 
     if args.categories:
