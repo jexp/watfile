@@ -5,3 +5,5 @@ __pycache__/
 .ruff_cache/
 sorted/
 .DS_Store
+.env
+dist/

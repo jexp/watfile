@@ -7,13 +7,13 @@ Ground truth comes from the arXiv subject tag in each paper's header:
     2609.19371v1  q-bio.TO   -> biology
 """
 
-import os
 import re
 from pathlib import Path
 
 import pytest
 
 from watfile.classifier.jev import JevClassifier
+from watfile.config import api_key_available, apply_config, load_config
 from watfile.extract import extract_text
 
 FIXTURE_DIR = Path(__file__).parent / "fixture"
@@ -42,11 +42,12 @@ def test_fixture_extraction_contains_subject_tag(filename: str) -> None:
 
 
 @pytest.mark.skipif(
-    not os.environ.get("TYPESAFE_API_KEY"),
-    reason="TYPESAFE_API_KEY not set",
+    not api_key_available(),
+    reason="no TYPESAFE_API_KEY in env, ./.env, or config file",
 )
 @pytest.mark.parametrize("filename,expected", sorted(EXPECTED.items()))
 def test_jev_classifies_fixture_correctly(filename: str, expected: str) -> None:
+    apply_config(load_config())
     text = extract_text(FIXTURE_DIR / filename)
     verdict = JevClassifier().classify(text, CATEGORIES)
     assert verdict.category == expected, (

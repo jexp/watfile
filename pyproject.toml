@@ -1,9 +1,19 @@
 [project]
 name = "watfile"
 version = "0.1.0"
-description = "Add your description here"
+description = "Classify documents with the TypeSafe Jev decision model and sort them into folders"
 authors = [
     { name = "Michael Hunger", email = "github@jexp.de" }
+]
+license = "MIT"
+readme = "README.md"
+keywords = ["classification", "files", "llm", "typesafe", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -17,6 +27,9 @@ watfile = "watfile:main"
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12.0"]
 build-backend = "uv_build"
+
+[project.urls]
+Repository = "https://github.com/jexp/watfile"
 
 [dependency-groups]
 dev = [

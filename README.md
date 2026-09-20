@@ -13,21 +13,44 @@ other backends slot in later.
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
+### From PyPI (once published)
+
+```sh
+# one-off run, no install
+uvx watfile --help
+
+# persistent CLI on your PATH
+uv tool install watfile
+watfile --help
+```
+
+### From source
+
 ```sh
 git clone <repo> && cd watfile
 uv sync            # create venv + install deps (typesafe-sdk, liteparse)
-```
+uv run watfile --help
 
-Set your API key (create one at <https://console.typesafe.ai/>):
-
-```sh
-export TYPESAFE_API_KEY=ts_...
-```
-
-Then run via `uv run watfile ...`, or install the CLI into your path:
-
-```sh
+# or install the local checkout as a tool
 uv tool install --from . watfile
+```
+
+### Configuration
+
+watfile resolves its TypeSafe API key (create one at <https://console.typesafe.ai/>)
+with this precedence — first match wins:
+
+1. `TYPESAFE_API_KEY` environment variable
+2. `.env` file in the current directory (gitignored; `TYPESAFE_API_KEY=...`)
+3. `~/.config/watfile/config.toml` (`api_key = "..."`, also `base_url`, `model`;
+   `$WATFILE_CONFIG` or `$XDG_CONFIG_HOME` can relocate it)
+
+```sh
+export TYPESAFE_API_KEY=...        # option 1
+echo 'TYPESAFE_API_KEY=...' > .env # option 2
+cat > ~/.config/watfile/config.toml <<'EOF'   # option 3
+api_key = "..."
+EOF
 ```
 
 ## Usage

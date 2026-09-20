@@ -1,0 +1,30 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}  # manual re-run of the last tag
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --frozen
+      - run: uv run pytest -q -k "not jev and not cli_end_to_end"
+        env:
+          TYPESAFE_API_KEY: ""  # force live tests to skip in CI
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release        # GitHub environment "release" (recommended for approvals)
+    permissions:
+      id-token: write           # REQUIRED for PyPI trusted publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1

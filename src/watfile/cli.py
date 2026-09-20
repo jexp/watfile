@@ -9,6 +9,7 @@ from typing import Sequence
 
 from .classifier.base import Classifier, Verdict
 from .classifier.jev import JevClassifier
+from .config import apply_config, load_config
 from .extract import UnsupportedFileTypeError, extract_text
 from .sorter import place_file
 
@@ -54,9 +55,19 @@ def _parse_categories_arg(raw: str) -> list[str]:
     return cats
 
 
-def _build_classifier(name: str) -> Classifier:
+def _build_classifier(name: str, config) -> Classifier:
     if name == "jev":
-        return JevClassifier()
+        if not config.api_key:
+            raise SystemExit(
+                "no TYPESAFE_API_KEY found.\n"
+                "Set the environment variable, or create a gitignored .env file with\n"
+                "TYPESAFE_API_KEY=..., or ~/.config/watfile/config.toml with:\n"
+                'api_key = "..."\n'
+                "Get a key at https://console.typesafe.ai/"
+            )
+        apply_config(config)
+        model = config.model or "jev-latest"
+        return JevClassifier(model=model)
     if name == "laya":
         raise SystemExit("laya backend not yet implemented (step 80 in PLAN.md)")
     raise SystemExit(f"unknown backend: {name}")
@@ -108,7 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"files: {len(files)}  backend: {args.backend}  target: {target_root}"
           + ("  (dry-run)" if args.dry_run else ""))
 
-    classifier = _build_classifier(args.backend)
+    classifier = _build_classifier(args.backend, load_config())
 
     failures = 0
     for path in files:
