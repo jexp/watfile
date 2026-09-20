@@ -23,9 +23,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# local MLX backend, Apple Silicon only — 'pip install watfile[laya]'
+# local backends — all optional; pick one (or install several, runtime is auto-detected)
+# Apple Silicon, MLX/GPU:            'pip install watfile[laya]'
+# Apple Silicon, Core ML / ANE:      'pip install watfile[laya-coreml]'
+# Any platform, PyTorch CPU/GPU:     'pip install watfile[laya-torch]'
 laya = [
     "laya-mlx>=0.1.0",
+]
+laya-coreml = [
+    "laya-coreml>=0.1.0",
+]
+laya-torch = [
+    "laya>=0.3.4",
 ]
 
 [project.scripts]

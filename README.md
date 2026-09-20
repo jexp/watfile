@@ -98,22 +98,31 @@ skipped with a warning; name collisions get a `_1`, `_2`… suffix.
   **Batches automatically**: documents are packed into one `system_one` call
   (~256 tokens each, up to ~100 files per call in the 30k-token window), so
   classifying a folder costs one API call, not one per file.
-- **`laya`** — local [laya-mlx](https://github.com/mizorewww/laya-mlx) typed
-  decision model on Apple Silicon (MLX, ~13ms/decision, fully offline after a
-  one-time ~1GB checkpoint download). No API key needed. Same question shape
-  as Jev. Because laya's context window is small (512–1024 tokens), the backend
-  defaults to **adaptive multi-chunk classification**: the extract is split
-  into ~200-token chunks; chunk 1 decides if its probability is decisive
-  (≥0.5), otherwise further chunks are classified and probabilities aggregated
-  until the decision is decisive (max 10). On the arXiv fixtures: 3/4 (Jev 4/4).
-  Optional dependency — install with `pip install watfile[laya]` (or `uv tool
-  install 'watfile[laya]'`); Apple Silicon only.
+- **`laya`** — local typed-decision model from the
+  [Laya](https://github.com/NandhaKishorM/laya) family; **runs on any
+  platform**. The runtime is auto-detected from what's installed
+  (`LAYA_RUNTIME` overrides):
+
+  | extra | runtime | where | speed |
+  |---|---|---|---|
+  | `pip install watfile[laya]` | MLX (GPU) | Apple Silicon | ~13ms/decision |
+  | `pip install watfile[laya-coreml]` | Core ML (ANE) | Apple Silicon | ~5ms, 2.8× lower energy |
+  | `pip install watfile[laya-torch]` | PyTorch (CPU/GPU) | **any OS** | ~45–450ms (CPU) |
+
+  No API key needed; checkpoints download once and then run offline. Default
+  checkpoints: multilingual where available (torch/coreml → handles non-English
+  documents out of the box). Because laya's context window is small
+  (512–1024 tokens), the backend defaults to **adaptive multi-chunk
+  classification**: the extract is split into ~200-token chunks; chunk 1
+  decides if its probability is decisive (≥0.5), otherwise further chunks are
+  classified and probabilities aggregated until the decision is decisive
+  (max 10). On the arXiv fixtures: 3/4 (Jev 4/4).
 
 ```sh
 watfile ~/Downloads -r -d ~/docs --backend laya
-# pick a checkpoint via config or env:
-#   ~/.config/watfile/config.toml -> laya_model = "aac6fef/laya-multilingual-mlx"
-#   or LAYA_MODEL=aac6fef/laya-mlx
+# checkpoint via config or env:
+#   ~/.config/watfile/config.toml -> laya_model = "..."
+#   or LAYA_MODEL=... / LAYA_RUNTIME=torch|mlx|coreml
 ```
 
 ### Options (main)
