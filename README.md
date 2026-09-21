@@ -145,6 +145,9 @@ main options:
   -o OUTPUT             output root for sorted files (default: same as -d, or ./sorted with -c)
   --backend {jev,laya}  classifier backend (default: jev)
   -n, --dry-run         print decisions without placing files
+  --min-confidence P    don't place files classified with confidence below P
+                        (default 0.5 — the TypeSafe-recommended floor for
+                        genuinely uncertain answers; 0 disables gating)
   -m, --move            move files into the category folder (default: symlink)
   --copy                copy files instead of symlinking
   --symlink             create symlinks in category folders (default)

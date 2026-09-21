@@ -169,6 +169,14 @@ def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     main.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
     main.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
     main.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
+    main.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.5,
+        metavar="P",
+        help="don't place files classified with confidence below P "
+        "(TypeSafe docs: 0.5 is the floor for genuinely uncertain answers; 0 = never skip)",
+    )
     placement = main.add_mutually_exclusive_group()
     placement.add_argument("-m", "--move", action="store_true", help="move files into the category folder (default: symlink)")
     placement.add_argument("--copy", action="store_true", help="copy files instead of symlinking")
@@ -292,12 +300,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         PLACEMENT_SYMLINK: "symlink",
     }[placement]
 
-    def _place(path: Path, verdict) -> None:
+    def _place(path: Path, verdict) -> bool:
+        """Place a classified file; returns True when placed, False when skipped
+        for low confidence (file is left untouched in its original location)."""
+        if verdict.confidence < args.min_confidence:
+            print(
+                f"uncertain ({verdict.category}, conf {verdict.confidence:.2f} < {args.min_confidence}) -> left in place",
+            )
+            return False
         result = place_file(path, verdict.category, target_root, dry_run=args.dry_run, placement=placement)
         prefix = "would " if args.dry_run else ""
         print(f"{verdict.category} (conf {verdict.confidence:.2f}) -> {prefix}{actions} to {result.destination}")
+        return True
 
     failures = 0
+    uncertain = 0
+    placed = 0
     # batching is automatic for jev (strictly better: fewer calls, same or
     # better accuracy per measurement), off for laya (local inference is
     # already fast), disabled by --no-batch or when multi-chunking is active
@@ -328,7 +346,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             verdicts = classifier.classify_batch([texts[i] for i in batch], categories)
             for i, verdict in zip(batch, verdicts):
                 print(f"{files[i].name}: ", end="")
-                _place(files[i], verdict)
+                if _place(files[i], verdict):
+                    placed += 1
+                else:
+                    uncertain += 1
     else:
         for path in files:
             print(f"{path.name}: ", end="", flush=True)
@@ -336,8 +357,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             if verdict is None:
                 failures += 1
                 continue
-            _place(path, verdict)
+            if _place(path, verdict):
+                placed += 1
+            else:
+                uncertain += 1
 
+    print(f"done: {placed} placed, {uncertain} uncertain (left in place), {failures} skipped/failed")
     return 1 if failures == len(files) else 0
 
 
