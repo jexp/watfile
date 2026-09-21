@@ -1,6 +1,6 @@
 [project]
 name = "watfile"
-version = "0.3.0"
+version = "0.3.1"
 description = "Classify documents with the TypeSafe Jev decision model and sort them into folders"
 authors = [
     { name = "Michael Hunger", email = "github@jexp.de" }
