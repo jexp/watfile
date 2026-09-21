@@ -28,7 +28,7 @@ class _KeywordClassifier(Classifier):
     def __init__(self) -> None:
         self.calls = 0
 
-    def classify(self, text: str, categories) -> Verdict:
+    def classify(self, text: str, categories, *, name: str | None = None) -> Verdict:
         self.calls += 1
         low = text.lower()
         scores = {c: 1.0 for c in categories}

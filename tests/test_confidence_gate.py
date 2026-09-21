@@ -8,17 +8,17 @@ from watfile.cli import main
 
 
 class _FixedClassifier(Classifier):
-    def __init__(self, confidence: float, category: str = "invoice") -> None:
+    def __init__(self, confidence: float, category: str = "invoice", runner_up: float = 0.1) -> None:
         self._verdict = Verdict(
             category=category,
             confidence=confidence,
-            probabilities={category: confidence},
+            probabilities={category: confidence, "other": runner_up},
         )
 
-    def classify(self, text, categories) -> Verdict:
+    def classify(self, text, categories, *, name=None) -> Verdict:
         return self._verdict
 
-    def classify_batch(self, texts, categories):
+    def classify_batch(self, texts, categories, *, names=None):
         return [self._verdict for _ in texts]
 
 
@@ -61,3 +61,53 @@ def test_custom_threshold(tmp_path: Path) -> None:
     # 0.85 conf with a 0.9 requirement -> skip
     rc, original, destination = _run(tmp_path, confidence=0.85, extra=["--min-confidence", "0.9"])
     assert not destination.exists()
+
+
+def test_uncertain_files_get_final_recap(tmp_path: Path, capsys) -> None:
+    _run(tmp_path, confidence=0.3)
+    out = capsys.readouterr().out
+    assert "UNCERTAIN" in out, "inline marker missing"
+    assert "NOT PLACED (review these files manually):" in out, "final recap missing"
+    assert "doc.txt" in out, "recap must name the file"
+    assert "invoice 0.30" in out, "recap must show the top category with its probability"
+    assert "other 0.10" in out, "recap must show the runner-up with its probability"
+
+
+def test_confident_run_has_no_recap(tmp_path: Path, capsys) -> None:
+    _run(tmp_path, confidence=0.95)
+    out = capsys.readouterr().out
+    assert "NOT PLACED" not in out
+
+
+def test_bare_filename_passed_to_classifier(tmp_path: Path) -> None:
+    """The classifier gets the bare filename, never the full path."""
+    seen: list[str | None] = []
+
+    class _Recording(_FixedClassifier):
+        def classify(self, text, categories, *, name=None):
+            seen.append(name)
+            return super().classify(text, categories, name=name)
+
+    src_dir = tmp_path / "in"
+    src_dir.mkdir()
+    (src_dir / "bill.txt").write_text("Invoice #7 amount EUR 99")
+    with patch("watfile.cli._build_classifier", return_value=_Recording(0.9)):
+        main([str(src_dir), "-c", "invoice,other", "-o", str(tmp_path / "out"), "--no-batch"])
+    assert seen == ["bill.txt"], f"expected bare filename, got {seen}"
+
+
+def test_batch_names_are_bare_filenames(tmp_path: Path) -> None:
+    seen: list = []
+
+    class _Recording(_FixedClassifier):
+        def classify_batch(self, texts, categories, *, names=None):
+            seen.append(list(names))
+            return super().classify_batch(texts, categories, names=names)
+
+    src_dir = tmp_path / "in"
+    src_dir.mkdir()
+    (src_dir / "a.txt").write_text("Invoice A")
+    (src_dir / "b.txt").write_text("Invoice B")
+    with patch("watfile.cli._build_classifier", return_value=_Recording(0.9)):
+        main([str(src_dir), "-c", "invoice,other", "-o", str(tmp_path / "out"), "--batch", "5"])
+    assert seen == [["a.txt", "b.txt"]], f"expected bare filenames, got {seen}"

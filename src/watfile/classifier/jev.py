@@ -17,12 +17,12 @@ class JevClassifier(Classifier):
     def __init__(self, model: str = "jev-latest") -> None:
         self._client = TypeSafeClient(model=model)
 
-    def classify(self, text: str, categories: Sequence[str]) -> Verdict:
+    def classify(self, text: str, categories: Sequence[str], *, name: str | None = None) -> Verdict:
         question = self._question(categories)
-        response = self._client.system_one(
-            state={"document": text},
-            questions={_QUESTION_KEY: question},
-        )
+        state: dict = {"document": text}
+        if name:
+            state["filename"] = name
+        response = self._client.system_one(state=state, questions={_QUESTION_KEY: question})
         answer = response.choices[_QUESTION_KEY]
         return Verdict(
             category=answer.choice,
@@ -30,7 +30,9 @@ class JevClassifier(Classifier):
             probabilities=dict(answer.probabilities),
         )
 
-    def classify_batch(self, texts: Sequence[str], categories: Sequence[str]) -> list[Verdict]:
+    def classify_batch(
+        self, texts: Sequence[str], categories: Sequence[str], *, names: Sequence[str | None] | None = None
+    ) -> list[Verdict]:
         """Classify all *texts* in ONE system_one call.
 
         Documents are concatenated into one state with explicit
@@ -41,8 +43,11 @@ class JevClassifier(Classifier):
         """
         if not texts:
             return []
+        name_list = list(names) if names is not None else [None] * len(texts)
         state = "\n\n".join(
-            f"=== DOCUMENT {i} START ===\n{text}\n=== DOCUMENT {i} END ==="
+            f"=== DOCUMENT {i} START ===\n"
+            + (f"filename: {name_list[i]}\n" if name_list[i] else "")
+            + f"{text}\n=== DOCUMENT {i} END ==="
             for i, text in enumerate(texts)
         )
         questions = {
@@ -73,7 +78,8 @@ class JevClassifier(Classifier):
         return Choice(
             instructions=(
                 "Which folder/category does this document belong to? "
-                "Judge by content, not filename. Pick exactly one."
+                "Judge primarily by content; use the filename only as a "
+                "tiebreaker when content is ambiguous or sparse. Pick exactly one."
             ),
             criteria={cat: None for cat in categories},
         )

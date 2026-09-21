@@ -144,12 +144,14 @@ class MultiChunkClassifier(Classifier):
         self._max_chunks = max_chunks
         self._tokens_per_chunk = tokens_per_chunk
 
-    def classify(self, text: str, categories: Sequence[str]) -> Verdict:
+    def classify(self, text: str, categories: Sequence[str], *, name: str | None = None) -> Verdict:
         parts = chunk_text_tokens(text, self._tokens_per_chunk)
 
         if self._chunks > 0:
             # fixed mode: classify exactly N chunks
-            verdicts = [self._inner.classify(p, categories) for p in parts[: self._chunks]]
+            verdicts = [
+                self._inner.classify(p, categories, name=name) for p in parts[: self._chunks]
+            ]
             return self._aggregate(verdicts, categories)
 
         # adaptive: classify chunk-by-chunk, extend only while the aggregated
@@ -160,7 +162,7 @@ class MultiChunkClassifier(Classifier):
         sums = {c: 0.0 for c in categories}
         aggregated: Verdict | None = None
         for n in range(1, n_max + 1):
-            verdict = self._inner.classify(parts[n - 1], categories)
+            verdict = self._inner.classify(parts[n - 1], categories, name=name)
             for cat, p in verdict.probabilities.items():
                 if cat in sums:
                     sums[cat] += p

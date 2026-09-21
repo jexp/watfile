@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -14,6 +15,24 @@ from .classifier.multi import MultiChunkClassifier, chunk_text_tokens, count_tok
 from .config import apply_config, load_config
 from .extract import UnsupportedFileTypeError, extract_text
 from .sorter import PLACEMENT_COPY, PLACEMENT_MOVE, PLACEMENT_SYMLINK, place_file
+
+#: ANSI colors on tty output; empty when piped (NO_COLOR respected).
+_TTY = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+_YELLOW = "\033[33m" if _TTY else ""
+_RED = "\033[31m" if _TTY else ""
+_BOLD = "\033[1m" if _TTY else ""
+_RESET = "\033[0m" if _TTY else ""
+
+
+def _top_categories(verdict: Verdict, n: int = 2) -> str:
+    """Top-n categories with probabilities: 'invoice 0.45 / donation 0.40'.
+
+    Probabilities (not the single confidence) because a close call between two
+    categories signals 'file fits both', while a flat spread signals 'no
+    fitting category exists' — the user needs to see which case they're in.
+    """
+    ranked = sorted(verdict.probabilities.items(), key=lambda kv: kv[1], reverse=True)
+    return " / ".join(f"{cat} {p:.2f}" for cat, p in ranked[:n])
 
 #: Jev context window (tokens) with headroom for state wrapper + questions.
 JEV_WINDOW_TOKENS = 32_000 - 2_000
@@ -125,7 +144,7 @@ def _classify_one(classifier: Classifier, path: Path, categories: Sequence[str])
     if not text.strip():
         print("  skipped (no extractable text)", file=sys.stderr)
         return None
-    return classifier.classify(text, categories)
+    return classifier.classify(text, categories, name=path.name)
 
 
 def _version_line() -> str:
@@ -304,8 +323,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         """Place a classified file; returns True when placed, False when skipped
         for low confidence (file is left untouched in its original location)."""
         if verdict.confidence < args.min_confidence:
+            uncertain_files.append((path, verdict))
+            top = _top_categories(verdict)
             print(
-                f"uncertain ({verdict.category}, conf {verdict.confidence:.2f} < {args.min_confidence}) -> left in place",
+                f"{_YELLOW}{_BOLD}UNCERTAIN{_RESET} — not placed "
+                f"({top}, threshold {args.min_confidence})"
             )
             return False
         result = place_file(path, verdict.category, target_root, dry_run=args.dry_run, placement=placement)
@@ -316,6 +338,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     failures = 0
     uncertain = 0
     placed = 0
+    uncertain_files: list[tuple[Path, Verdict]] = []
     # batching is automatic for jev (strictly better: fewer calls, same or
     # better accuracy per measurement), off for laya (local inference is
     # already fast), disabled by --no-batch or when multi-chunking is active
@@ -343,7 +366,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             texts[i] = _trim_to_tokens(text, doc_tokens)
         for batch in _pack_batches(texts, doc_tokens, JEV_WINDOW_TOKENS, batch_cap):
             print(f"batch of {len(batch)} file(s)...", flush=True)
-            verdicts = classifier.classify_batch([texts[i] for i in batch], categories)
+            verdicts = classifier.classify_batch(
+                [texts[i] for i in batch], categories, names=[files[i].name for i in batch]
+            )
             for i, verdict in zip(batch, verdicts):
                 print(f"{files[i].name}: ", end="")
                 if _place(files[i], verdict):
@@ -362,7 +387,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 uncertain += 1
 
-    print(f"done: {placed} placed, {uncertain} uncertain (left in place), {failures} skipped/failed")
+    # summary; uncertain files get an explicit recap so they can't be missed
+    print(f"\ndone: {placed} placed, {_YELLOW}{uncertain} uncertain (left in place){_RESET}, {failures} skipped/failed")
+    if uncertain_files:
+        print(f"{_YELLOW}{_BOLD}NOT PLACED (review these files manually):{_RESET}")
+        for path, verdict in uncertain_files:
+            print(f"  {path}  — {_top_categories(verdict)}")
+        print(f"{_YELLOW}tip: close top-2 probabilities = file fits both categories;{_RESET}")
+        print(f"{_YELLOW}     flat spread = a category is likely missing. Adjust and re-run.{_RESET}")
     return 1 if failures == len(files) else 0
 
 
