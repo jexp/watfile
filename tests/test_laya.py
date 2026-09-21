@@ -53,7 +53,7 @@ def test_laya_question_shape_matches_upstream_schema(monkeypatch: pytest.MonkeyP
     LayaClassifier(model="test-checkpoint", runtime="torch").classify("Invoice #42", cats)
     _, questions = agent.predict.call_args.args
     assert questions[_QUESTION_KEY]["type"] == "choice"
-    assert questions[_QUESTION_KEY]["criteria"] == cats
+    assert questions[_QUESTION_KEY]["criteria"] == {c: None for c in cats}
 
 
 def test_laya_truncates_state_to_context_limit(monkeypatch: pytest.MonkeyPatch) -> None:

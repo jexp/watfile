@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from watfile.classifier.base import Classifier, Verdict
 from watfile.cli import main
 
@@ -15,10 +17,10 @@ class _FixedClassifier(Classifier):
             probabilities={category: confidence, "other": runner_up},
         )
 
-    def classify(self, text, categories, *, name=None) -> Verdict:
+    def classify(self, text, categories, *, name=None, descriptions=None) -> Verdict:
         return self._verdict
 
-    def classify_batch(self, texts, categories, *, names=None):
+    def classify_batch(self, texts, categories, *, names=None, descriptions=None):
         return [self._verdict for _ in texts]
 
 
@@ -84,7 +86,7 @@ def test_bare_filename_passed_to_classifier(tmp_path: Path) -> None:
     seen: list[str | None] = []
 
     class _Recording(_FixedClassifier):
-        def classify(self, text, categories, *, name=None):
+        def classify(self, text, categories, *, name=None, descriptions=None):
             seen.append(name)
             return super().classify(text, categories, name=name)
 
@@ -100,7 +102,7 @@ def test_batch_names_are_bare_filenames(tmp_path: Path) -> None:
     seen: list = []
 
     class _Recording(_FixedClassifier):
-        def classify_batch(self, texts, categories, *, names=None):
+        def classify_batch(self, texts, categories, *, names=None, descriptions=None):
             seen.append(list(names))
             return super().classify_batch(texts, categories, names=names)
 
@@ -111,3 +113,55 @@ def test_batch_names_are_bare_filenames(tmp_path: Path) -> None:
     with patch("watfile.cli._build_classifier", return_value=_Recording(0.9)):
         main([str(src_dir), "-c", "invoice,other", "-o", str(tmp_path / "out"), "--batch", "5"])
     assert seen == [["a.txt", "b.txt"]], f"expected bare filenames, got {seen}"
+
+
+def test_categories_and_directory_combined(tmp_path: Path) -> None:
+    """-c + -d: target folder used as output root even if empty/missing."""
+    src_dir = tmp_path / "in"
+    src_dir.mkdir()
+    (src_dir / "doc.txt").write_text("Invoice #7 amount EUR 99")
+    target = tmp_path / "fresh-target"  # does not exist yet
+    with patch("watfile.cli._build_classifier", return_value=_FixedClassifier(0.9)):
+        rc = main([str(src_dir), "-c", "invoice,other", "-d", str(target)])
+    assert rc == 0
+    assert (target / "invoice" / "doc.txt").is_symlink()
+
+
+def test_neither_categories_nor_directory_errors(tmp_path: Path) -> None:
+    src_dir = tmp_path / "in"
+    src_dir.mkdir()
+    (src_dir / "doc.txt").write_text("content")
+    with pytest.raises(SystemExit):
+        main([str(src_dir), "-o", str(tmp_path / "out")])
+
+
+def test_category_descriptions_reach_classifier(tmp_path: Path) -> None:
+    """-c 'name:description,...' — descriptions land in the Choice criteria."""
+    seen: dict = {}
+
+    class _Recording(_FixedClassifier):
+        def classify(self, text, categories, *, name=None, descriptions=None):
+            seen["categories"] = list(categories)
+            seen["descriptions"] = descriptions
+            return super().classify(text, categories, name=name)
+
+    src_dir = tmp_path / "in"
+    src_dir.mkdir()
+    (src_dir / "doc.txt").write_text("Invoice #7 amount EUR 99")
+    with patch("watfile.cli._build_classifier", return_value=_Recording(0.9)):
+        main([
+            str(src_dir),
+            "-c", "invoice:bills and payment requests,other",
+            "-o", str(tmp_path / "out"),
+            "--no-batch",
+        ])
+    assert seen["categories"] == ["invoice", "other"]
+    assert seen["descriptions"] == {"invoice": "bills and payment requests"}
+
+
+def test_parse_categories_descriptions() -> None:
+    from watfile.cli import _parse_categories_arg
+
+    names, descriptions = _parse_categories_arg("invoice:bills,donation,apartment:rental contracts")
+    assert names == ["invoice", "donation", "apartment"]
+    assert descriptions == {"invoice": "bills", "apartment": "rental contracts"}

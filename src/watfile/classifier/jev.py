@@ -17,8 +17,15 @@ class JevClassifier(Classifier):
     def __init__(self, model: str = "jev-latest") -> None:
         self._client = TypeSafeClient(model=model)
 
-    def classify(self, text: str, categories: Sequence[str], *, name: str | None = None) -> Verdict:
-        question = self._question(categories)
+    def classify(
+        self,
+        text: str,
+        categories: Sequence[str],
+        *,
+        name: str | None = None,
+        descriptions: dict[str, str] | None = None,
+    ) -> Verdict:
+        question = self._question(categories, descriptions)
         state: dict = {"document": text}
         if name:
             state["filename"] = name
@@ -31,7 +38,12 @@ class JevClassifier(Classifier):
         )
 
     def classify_batch(
-        self, texts: Sequence[str], categories: Sequence[str], *, names: Sequence[str | None] | None = None
+        self,
+        texts: Sequence[str],
+        categories: Sequence[str],
+        *,
+        names: Sequence[str | None] | None = None,
+        descriptions: dict[str, str] | None = None,
     ) -> list[Verdict]:
         """Classify all *texts* in ONE system_one call.
 
@@ -56,7 +68,7 @@ class JevClassifier(Classifier):
                     f"Which folder/category does DOCUMENT {i} belong to? "
                     "Judge by its content, not other documents. Pick exactly one."
                 ),
-                criteria={cat: None for cat in categories},
+                criteria={cat: (descriptions or {}).get(cat) for cat in categories},
             )
             for i in range(len(texts))
         }
@@ -74,12 +86,12 @@ class JevClassifier(Classifier):
         return verdicts
 
     @staticmethod
-    def _question(categories: Sequence[str]) -> Choice:
+    def _question(categories: Sequence[str], descriptions: dict[str, str] | None = None) -> Choice:
         return Choice(
             instructions=(
                 "Which folder/category does this document belong to? "
                 "Judge primarily by content; use the filename only as a "
                 "tiebreaker when content is ambiguous or sparse. Pick exactly one."
             ),
-            criteria={cat: None for cat in categories},
+            criteria={cat: (descriptions or {}).get(cat) for cat in categories},
         )

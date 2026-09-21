@@ -80,11 +80,29 @@ def _categories_from_dir(target: Path) -> list[str]:
     return subdirs
 
 
-def _parse_categories_arg(raw: str) -> list[str]:
-    cats = [c.strip() for c in raw.split(",") if c.strip()]
-    if len(cats) < 2:
-        raise SystemExit("need at least 2 categories for -c")
-    return cats
+def _parse_categories_arg(raw: str) -> tuple[list[str], dict[str, str]]:
+    """Parse 'name[:description],name2[:description],name3'.
+
+    Descriptions are optional per category and are included in the Choice
+    criteria sent to the classifier. Returns (names, descriptions-with-desc).
+    Note: a description cannot contain a comma (it's the category separator).
+    """
+    names: list[str] = []
+    descriptions: dict[str, str] = {}
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        name, sep, desc = token.partition(":")
+        name = name.strip()
+        if not name:
+            continue
+        names.append(name)
+        if sep and desc.strip():
+            descriptions[name] = desc.strip()
+    if len(names) < 2:
+        raise SystemExit("need at least 2 categories for -c (e.g. -c invoice,donation)")
+    return names, descriptions
 
 
 def _trim_to_tokens(text: str, max_tokens: int) -> str:
@@ -135,7 +153,12 @@ def _build_classifier(name: str, config) -> Classifier:
     raise SystemExit(f"unknown backend: {name}")
 
 
-def _classify_one(classifier: Classifier, path: Path, categories: Sequence[str]) -> Verdict | None:
+def _classify_one(
+    classifier: Classifier,
+    path: Path,
+    categories: Sequence[str],
+    descriptions: dict[str, str] | None = None,
+) -> Verdict | None:
     try:
         text = extract_text(path)
     except UnsupportedFileTypeError as exc:
@@ -144,7 +167,7 @@ def _classify_one(classifier: Classifier, path: Path, categories: Sequence[str])
     if not text.strip():
         print("  skipped (no extractable text)", file=sys.stderr)
         return None
-    return classifier.classify(text, categories, name=path.name)
+    return classifier.classify(text, categories, name=path.name, descriptions=descriptions)
 
 
 def _version_line() -> str:
@@ -170,7 +193,9 @@ def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     show_advanced=False hides the advanced options from --help (they still
     work); show_advanced=True lists them. This keeps `watfile --help` short.
     """
-    epilog = None if show_advanced else "Run 'watfile --help-all' for advanced options (batching, chunking, token budgets)."
+    epilog = None if show_advanced else (
+        "Run 'watfile --help-all' for advanced options (backend, confidence threshold, batching, chunking)."
+    )
     parser = _VersionedParser(
         prog="watfile",
         description="Classify files with a decision model and sort them into category folders.",
@@ -180,28 +205,52 @@ def _build_parser(*, show_advanced: bool) -> argparse.ArgumentParser:
     main = parser.add_argument_group("main options")
     main.add_argument("-r", "--recursive", action="store_true", help="recurse into folder inputs")
     main.add_argument(
-        "-v", "--version", action="version", version=_version_line(), help="print version and exit"
+        "-v",
+        "--version",
+        action="version",
+        version=_version_line(),
+        help="print version and exit",
     )
-    target = main.add_mutually_exclusive_group(required=True)
-    target.add_argument("-c", "--categories", help="comma-separated categories, e.g. invoice,donation,apartment")
-    target.add_argument("-d", "--directory", help="target folder whose existing subfolders are the categories")
-    main.add_argument("-o", "--output", help="output root for sorted files (default: same as -d, or ./sorted with -c)")
-    main.add_argument("--backend", default="jev", choices=["jev", "laya"], help="classifier backend (default: jev)")
-    main.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
     main.add_argument(
-        "--min-confidence",
-        type=float,
-        default=0.5,
-        metavar="P",
-        help="don't place files classified with confidence below P "
-        "(TypeSafe docs: 0.5 is the floor for genuinely uncertain answers; 0 = never skip)",
+        "-c",
+        "--categories",
+        help="comma-separated categories, e.g. invoice,donation,apartment "
+        "(default: subfolders of -d DIR)",
     )
+    main.add_argument(
+        "-d",
+        "--directory",
+        help="target folder; its subfolders are the categories unless -c is given "
+        "(created if missing when -c is given)",
+    )
+    main.add_argument(
+        "-o",
+        "--output",
+        help="output root for sorted files (default: -d DIR, or ./sorted with -c only)",
+    )
+    main.add_argument("-n", "--dry-run", action="store_true", help="print decisions without placing files")
     placement = main.add_mutually_exclusive_group()
     placement.add_argument("-m", "--move", action="store_true", help="move files into the category folder (default: symlink)")
     placement.add_argument("--copy", action="store_true", help="copy files instead of symlinking")
     placement.add_argument("--symlink", action="store_true", help="create symlinks in category folders (default)")
 
     advanced = parser.add_argument_group("advanced options" if show_advanced else None)
+    advanced.add_argument(
+        "--backend",
+        default="jev",
+        choices=["jev", "laya"],
+        help=("classifier backend (default: jev — cloud API; laya = local typed-decision model, "
+        "see README for runtime extras)" if show_advanced else argparse.SUPPRESS),
+    )
+    advanced.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.5,
+        metavar="P",
+        help=("don't place files classified with confidence below P "
+        "(TypeSafe docs: 0.5 is the floor for genuinely uncertain answers; 0 = never skip)"
+        if show_advanced else argparse.SUPPRESS),
+    )
     advanced.add_argument(
         "--batch",
         type=int,
@@ -287,10 +336,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser(show_advanced=False)
     args = parser.parse_args(argv)
 
+    if not args.categories and not args.directory:
+        raise SystemExit("need categories (-c) or a target folder with category subfolders (-d)")
+    descriptions: dict[str, str] = {}
     if args.categories:
-        categories = _parse_categories_arg(args.categories)
-        target_root = Path(args.output) if args.output else Path("sorted")
+        # explicit categories; -d (if given) is just the output root and may
+        # be created empty — subfolders are made per category on placement
+        categories, descriptions = _parse_categories_arg(args.categories)
+        target_root = (
+            Path(args.output).expanduser() if args.output
+            else Path(args.directory).expanduser() if args.directory
+            else Path("sorted")
+        )
     else:
+        # categories come from the target folder's existing subfolders
         target_root = Path(args.directory).expanduser()
         categories = _categories_from_dir(target_root)
         if args.output:
@@ -367,7 +426,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         for batch in _pack_batches(texts, doc_tokens, JEV_WINDOW_TOKENS, batch_cap):
             print(f"batch of {len(batch)} file(s)...", flush=True)
             verdicts = classifier.classify_batch(
-                [texts[i] for i in batch], categories, names=[files[i].name for i in batch]
+                [texts[i] for i in batch],
+                categories,
+                names=[files[i].name for i in batch],
+                descriptions=descriptions or None,
             )
             for i, verdict in zip(batch, verdicts):
                 print(f"{files[i].name}: ", end="")
@@ -378,7 +440,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         for path in files:
             print(f"{path.name}: ", end="", flush=True)
-            verdict = _classify_one(classifier, path, categories)
+            verdict = _classify_one(classifier, path, categories, descriptions or None)
             if verdict is None:
                 failures += 1
                 continue

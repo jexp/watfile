@@ -55,12 +55,18 @@ Point watfile at files or folders, and either give a comma-separated category
 list (`-c`) or a target folder whose subfolders are the categories (`-d`):
 
 ```sh
-# explicit categories, files moved into ./sorted/<category>/
+# explicit categories, files sorted into ./sorted/<category>/
 uv run watfile ~/Downloads/invoice.pdf -c invoice,donation,apartment
+
+# categories with optional descriptions (included in the classification prompt)
+uv run watfile ~/Downloads -c 'invoice:bills and payment requests,donation:charity receipts'
 
 # folder input, recursive; categories = existing subfolders of -d
 mkdir -p ~/docs/{invoice,donation,apartment}
 uv run watfile ~/Downloads -r -d ~/docs
+
+# -c and -d combined: target folder (created if missing) with explicit categories
+uv run watfile ~/Downloads -r -d ~/docs -c invoice,donation
 
 # preview without touching anything
 uv run watfile ~/Downloads -r -d ~/docs -n
@@ -130,9 +136,8 @@ watfile ~/Downloads -r -d ~/docs --backend laya
 `watfile --help` shows only these:
 
 ```
-usage: watfile [-h] [-r] (-c CATEGORIES | -d DIRECTORY) [-o OUTPUT]
-               [--backend {jev,laya}] [-n] [-m | --copy | --symlink]
-               [--help-all]
+usage: watfile [-h] [-r] (-c CATEGORIES | -d DIRECTORY) [-o OUTPUT] [-n]
+               [-m | --copy | --symlink] [--help-all] [--self-update]
                inputs [inputs ...]
 
 main options:
@@ -140,14 +145,11 @@ main options:
   --help-all            show advanced options too
   -r, --recursive       recurse into folder inputs
   -v, --version         print version and exit
-  -c CATEGORIES         comma-separated categories
-  -d DIRECTORY          target folder whose existing subfolders are the categories
+  -c CATEGORIES         comma-separated categories, optionally 'name:description'
+  -d DIRECTORY          target folder; subfolders = categories unless -c is given
+                        (combinable with -c; created if missing)
   -o OUTPUT             output root for sorted files (default: same as -d, or ./sorted with -c)
-  --backend {jev,laya}  classifier backend (default: jev)
   -n, --dry-run         print decisions without placing files
-  --min-confidence P    don't place files classified with confidence below P
-                        (default 0.5 — the TypeSafe-recommended floor for
-                        genuinely uncertain answers; 0 disables gating)
   -m, --move            move files into the category folder (default: symlink)
   --copy                copy files instead of symlinking
   --symlink             create symlinks in category folders (default)
@@ -159,6 +161,11 @@ main options:
 Shown by `watfile --help-all`:
 
 ```
+  --backend {jev,laya}  classifier backend (default: jev — cloud API; laya =
+                        local typed-decision model, see Backends for extras)
+  --min-confidence P    don't place files classified with confidence below P
+                        (default 0.5 — the TypeSafe-recommended floor for
+                        genuinely uncertain answers; 0 disables gating)
   --batch N             cap files per API call (default: automatic — jev packs
                         everything that fits the 30k-token window, ~100 docs;
                         laya doesn't batch)

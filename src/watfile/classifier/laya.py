@@ -102,7 +102,14 @@ class LayaClassifier(Classifier):
                     self._agent = laya.load(self._model_name)
         return self._agent
 
-    def classify(self, text: str, categories: Sequence[str], *, name: str | None = None) -> Verdict:
+    def classify(
+        self,
+        text: str,
+        categories: Sequence[str],
+        *,
+        name: str | None = None,
+        descriptions: dict[str, str] | None = None,
+    ) -> Verdict:
         state = text[:_MAX_STATE_CHARS]
         if name:
             # prefix the bare filename as a weak hint; state is a single string
@@ -115,7 +122,8 @@ class LayaClassifier(Classifier):
                     "Judge primarily by content; use the filename only as a "
                     "tiebreaker when content is ambiguous or sparse."
                 ),
-                "criteria": list(categories),
+                # dict form carries optional per-category descriptions
+                "criteria": {cat: (descriptions or {}).get(cat) for cat in categories},
             }
         }
         result = self._agent_or_load().predict(state, questions)

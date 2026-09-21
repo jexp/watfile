@@ -12,7 +12,7 @@ class _FakeClassifier(Classifier):
     def __init__(self) -> None:
         self.calls = 0
 
-    def classify(self, text: str, categories, *, name: str | None = None) -> Verdict:
+    def classify(self, text: str, categories, *, name: str | None = None, descriptions: dict | None = None) -> Verdict:
         self.calls += 1
         probs = {c: 0.1 for c in categories}
         for c in categories:

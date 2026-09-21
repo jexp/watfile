@@ -19,16 +19,29 @@ class Classifier(ABC):
     (classify_batch) can be added without changing the interface."""
 
     @abstractmethod
-    def classify(self, text: str, categories: Sequence[str], *, name: str | None = None) -> Verdict:
+    def classify(
+        self,
+        text: str,
+        categories: Sequence[str],
+        *,
+        name: str | None = None,
+        descriptions: dict[str, str] | None = None,
+    ) -> Verdict:
         """Classify one document's text into exactly one of *categories*.
 
         *name* is the bare filename (no directory), passed as a weak hint
-        alongside the content — never the full path.
+        alongside the content — never the full path. *descriptions* optionally
+        maps a category to a hint describing what belongs in it.
         """
         ...
 
     def classify_batch(
-        self, texts: Sequence[str], categories: Sequence[str], *, names: Sequence[str | None] | None = None
+        self,
+        texts: Sequence[str],
+        categories: Sequence[str],
+        *,
+        names: Sequence[str | None] | None = None,
+        descriptions: dict[str, str] | None = None,
     ) -> list[Verdict]:
         """Classify many documents. Backends that pack multiple documents into
         one API call override this; the default loops classify().
@@ -36,4 +49,7 @@ class Classifier(ABC):
         Must return one Verdict per input, in order.
         """
         name_list = list(names) if names is not None else [None] * len(texts)
-        return [self.classify(t, categories, name=n) for t, n in zip(texts, name_list)]
+        return [
+            self.classify(t, categories, name=n, descriptions=descriptions)
+            for t, n in zip(texts, name_list)
+        ]
