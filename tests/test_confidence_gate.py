@@ -165,3 +165,15 @@ def test_parse_categories_descriptions() -> None:
     names, descriptions = _parse_categories_arg("invoice:bills,donation,apartment:rental contracts")
     assert names == ["invoice", "donation", "apartment"]
     assert descriptions == {"invoice": "bills", "apartment": "rental contracts"}
+
+
+def test_parse_quoted_descriptions_with_commas() -> None:
+    from watfile.cli import _parse_categories_arg
+
+    raw = 'invoice:"bills, payments, and refund requests",other:"misc, everything else",third'
+    names, descriptions = _parse_categories_arg(raw)
+    assert names == ["invoice", "other", "third"]
+    assert descriptions == {
+        "invoice": "bills, payments, and refund requests",
+        "other": "misc, everything else",
+    }

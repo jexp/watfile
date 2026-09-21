@@ -80,16 +80,41 @@ def _categories_from_dir(target: Path) -> list[str]:
     return subdirs
 
 
+def _split_outside_quotes(raw: str) -> list[str]:
+    """Split on commas that are not inside double quotes."""
+    parts: list[str] = []
+    current: list[str] = []
+    in_quotes = False
+    for ch in raw:
+        if ch == '"':
+            in_quotes = not in_quotes
+            current.append(ch)
+        elif ch == "," and not in_quotes:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    parts.append("".join(current))
+    return parts
+
+
+def _strip_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        return value[1:-1]
+    return value
+
+
 def _parse_categories_arg(raw: str) -> tuple[list[str], dict[str, str]]:
     """Parse 'name[:description],name2[:description],name3'.
 
     Descriptions are optional per category and are included in the Choice
-    criteria sent to the classifier. Returns (names, descriptions-with-desc).
-    Note: a description cannot contain a comma (it's the category separator).
+    criteria sent to the classifier. A description containing commas can be
+    wrapped in double quotes: 'invoice:"bills, payments, refunds",other'.
+    Returns (names, descriptions-with-desc).
     """
     names: list[str] = []
     descriptions: dict[str, str] = {}
-    for token in raw.split(","):
+    for token in _split_outside_quotes(raw):
         token = token.strip()
         if not token:
             continue
@@ -99,7 +124,7 @@ def _parse_categories_arg(raw: str) -> tuple[list[str], dict[str, str]]:
             continue
         names.append(name)
         if sep and desc.strip():
-            descriptions[name] = desc.strip()
+            descriptions[name] = _strip_quotes(desc.strip())
     if len(names) < 2:
         raise SystemExit("need at least 2 categories for -c (e.g. -c invoice,donation)")
     return names, descriptions
